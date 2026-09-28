@@ -24,6 +24,7 @@ namespace NodeResearchBranches.Tests
             Run(nameof(LoneRootsWrapIntoGrid), LoneRootsWrapIntoGrid);
             Run(nameof(ErasFormLeftToRightBlocks), ErasFormLeftToRightBlocks);
             Run(nameof(EraBranchesFollowEarlierEraOrder), EraBranchesFollowEarlierEraOrder);
+            Run(nameof(ManySmallTreesWrapSideBySide), ManySmallTreesWrapSideBySide);
             Console.WriteLine(failures == 0 ? "All tests passed." : $"{failures} test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -65,7 +66,7 @@ namespace NodeResearchBranches.Tests
             foreach (var (from, to) in edges)
             {
                 if (items[to].IsPhantom || order[from] >= order[to]) continue;
-                Check(r.X[to] > r.X[from], $"{items[to].Key} is not right of {items[from].Key}");
+                Check(r.X[to] > r.X[from], $"{items[to].Key} is not right of {items[from].Key} (x {r.X[to]:F0} vs {r.X[from]:F0}, col {r.Column[to]} vs {r.Column[from]}, primary {r.PrimaryParent[to]})");
             }
             for (int i = 0; i < items.Count; i++)
                 for (int j = i + 1; j < items.Count; j++)
@@ -264,6 +265,29 @@ namespace NodeResearchBranches.Tests
             AssertValid(items, edges, r);
             Check(r.Y[0] < r.Y[3], "Big should sit above Small");
             Check(r.Y[7] < r.Y[5], "MedB (fed by Big) should sit above MedA (fed by Small), despite costing more");
+        }
+
+        private static void ManySmallTreesWrapSideBySide()
+        {
+            // Twelve independent three-project trees, plus one link from tree 0 into tree 11.
+            var items = new List<LayoutItem>();
+            var edges = new List<(int, int)>();
+            for (int t = 0; t < 12; t++)
+            {
+                int b = items.Count;
+                items.Add(Item("T" + t, 100f + t, 80f, true));
+                items.Add(Item("T" + t + "a"));
+                items.Add(Item("T" + t + "b"));
+                edges.Add((b, b + 1));
+                edges.Add((b, b + 2));
+            }
+            edges.Add((1, 34));
+            var r = BranchLayout.Compute(items, edges);
+            var flat = BranchLayout.Compute(items, edges, new LayoutOptions { EraAspect = 0f });
+            AssertValid(items, edges, r);
+            float W(LayoutResult res) => Enumerable.Range(0, items.Count).Max(i => res.X[i] + items[i].Width / 2f) - Enumerable.Range(0, items.Count).Min(i => res.X[i] - items[i].Width / 2f);
+            Check(Height(items, r) < Height(items, flat) / 2f, $"trees should wrap: {Height(items, r)} vs {Height(items, flat)}");
+            Check(Height(items, r) < W(r) * 1.5f, $"block should be roughly square: {W(r)} x {Height(items, r)}");
         }
 
         private static void ShrinkingABubbleShrinksItsBranch()

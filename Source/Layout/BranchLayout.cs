@@ -29,6 +29,7 @@ namespace NodeResearchBranches.Layout
         public int MaxFanRows = 6;
         public float FanGap = 16f;
         public float EraGap = 220f;
+        public float EraAspect = 1f;
     }
 
     public sealed class LayoutResult
@@ -276,20 +277,37 @@ namespace NodeResearchBranches.Layout
             Array.Resize(ref x, n);
             Array.Resize(ref y, n);
 
-            float treeTop = float.PositiveInfinity, treeBottom = float.NegativeInfinity;
+            var rootBlockOf = new Dictionary<int, int>();
+            foreach (var b in blocks)
+                if (roots.Contains(b.Index)) foreach (var m in b.Members) rootBlockOf[m] = b.Index;
+            Shelve(items, g, primary, roots, rootBlockOf, isolated, x, y, col, o);
+
+            float treeTop = float.PositiveInfinity, treeBottom = float.NegativeInfinity, treeLeft = float.PositiveInfinity, treeRight = float.NegativeInfinity;
+            int treeMaxCol = 0;
             for (int i = 0; i < n; i++)
             {
                 if (isolated[i] || items[i].IsEmergence) continue;
                 treeTop = Math.Min(treeTop, y[i] - items[i].Top);
                 treeBottom = Math.Max(treeBottom, y[i] + items[i].Bottom);
+                treeLeft = Math.Min(treeLeft, x[i] - items[i].Width / 2f);
+                treeRight = Math.Max(treeRight, x[i] + items[i].Width / 2f);
+                treeMaxCol = Math.Max(treeMaxCol, col[i]);
             }
             bool hasTree = !float.IsInfinity(treeTop);
-            if (!hasTree) { treeTop = 0f; treeBottom = 0f; }
+            if (!hasTree) { treeTop = 0f; treeBottom = 0f; treeLeft = 0f; treeRight = 0f; }
 
             for (int i = 0; i < n; i++)
-                if (items[i].IsEmergence) y[i] = (treeTop + treeBottom) / 2f;
+            {
+                if (!items[i].IsEmergence) continue;
+                y[i] = (treeTop + treeBottom) / 2f;
+                if (hasTree)
+                {
+                    x[i] = treeRight + o.ColumnGap + items[i].Width / 2f;
+                    col[i] = treeMaxCol + 1;
+                }
+            }
 
-            PlaceIsolated(items, isolated, x, y, xOfCol, colOffset, maxCol, hasTree ? treeBottom + o.RootGap : 0f, o);
+            PlaceIsolated(items, isolated, x, y, treeLeft, treeRight, hasTree ? treeBottom + o.RootGap : 0f, o);
 
             // Centre the whole layout on the origin.
             float minX = float.PositiveInfinity, maxX = float.NegativeInfinity, minY = float.PositiveInfinity, maxY = float.NegativeInfinity;
@@ -592,13 +610,146 @@ namespace NodeResearchBranches.Layout
         }
 
         // Unconnected projects fill rows beneath the tree, as wide as the tree itself.
-        private static void PlaceIsolated(IList<LayoutItem> items, bool[] isolated, float[] x, float[] y, float[] xOfCol, int colOffset, int maxCol, float rowTop, LayoutOptions o)
+        private sealed class Unit
+        {
+            public int Id;
+            public List<int> Members = new List<int>();
+            public HashSet<int> Successors = new HashSet<int>();
+            public HashSet<int> Reach = new HashSet<int>();
+            public float Left = float.PositiveInfinity, Right = float.NegativeInfinity, Top = float.PositiveInfinity, Bottom = float.NegativeInfinity;
+            public int MinCol = int.MaxValue, MaxCol = int.MinValue;
+            public bool IsPhantom;
+            public float Height => Bottom - Top;
+        }
+
+        // Separate trees stacked into one tall pile are wrapped into side-by-side stacks, aiming for the block shape in EraAspect.
+        // A tree only moves to a later stack if nothing already placed depends on it, so prerequisites stay to the left.
+        private static void Shelve(IList<LayoutItem> items, Graph g, int[] primary, List<int> roots, Dictionary<int, int> rootBlockOf, bool[] isolated, float[] x, float[] y, int[] col, LayoutOptions o)
+        {
+            if (o.EraAspect <= 0f) return;
+            int n = items.Count;
+            int UnitOf(int i)
+            {
+                while (primary[i] >= 0) i = primary[i];
+                return rootBlockOf.TryGetValue(i, out int b) ? b : i;
+            }
+
+            var units = new Dictionary<int, Unit>();
+            var unitOf = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                unitOf[i] = -1;
+                if (isolated[i] || items[i].IsEmergence) continue;
+                int id = UnitOf(i);
+                if (!units.TryGetValue(id, out var u)) units[id] = u = new Unit { Id = id };
+                unitOf[i] = id;
+                u.Members.Add(i);
+                u.IsPhantom |= items[i].IsPhantom;
+                u.Left = Math.Min(u.Left, x[i] - items[i].Width / 2f);
+                u.Right = Math.Max(u.Right, x[i] + items[i].Width / 2f);
+                u.Top = Math.Min(u.Top, y[i] - items[i].Top);
+                u.Bottom = Math.Max(u.Bottom, y[i] + items[i].Bottom);
+                u.MinCol = Math.Min(u.MinCol, col[i]);
+                u.MaxCol = Math.Max(u.MaxCol, col[i]);
+            }
+            foreach (var (from, to) in g.Edges)
+                if (unitOf[from] >= 0 && unitOf[to] >= 0 && unitOf[from] != unitOf[to])
+                    units[unitOf[from]].Successors.Add(unitOf[to]);
+
+            var order = roots.Where(units.ContainsKey).Select(r => units[r]).ToList();
+            if (order.Count < 2) return;
+
+            // Follow chains through other trees, so a tree never lands right of something it feeds indirectly.
+            foreach (var u in units.Values)
+            {
+                var reach = new HashSet<int>();
+                var stack = new Stack<int>(u.Successors);
+                while (stack.Count > 0)
+                {
+                    int s = stack.Pop();
+                    if (s == u.Id || !reach.Add(s)) continue;
+                    foreach (var t in units[s].Successors) stack.Push(t);
+                }
+                u.Reach = reach;
+            }
+
+            List<List<Unit>> Pack(float limit)
+            {
+                var shelves = new List<List<Unit>> { new List<Unit>() };
+                var heights = new List<float> { 0f };
+                var shelfOf = new Dictionary<int, int>();
+                foreach (var u in order)
+                {
+                    // Anything this tree feeds that is already placed caps how far right it may go.
+                    int cap = u.IsPhantom ? 0 : shelves.Count - 1;
+                    foreach (var s in u.Reach)
+                        if (shelfOf.TryGetValue(s, out int si)) cap = Math.Min(cap, si);
+
+                    int target = cap;
+                    if (target == shelves.Count - 1 && !u.IsPhantom && u.Reach.All(s => !shelfOf.ContainsKey(s))
+                        && shelves[target].Count > 0 && heights[target] + o.RootGap + u.Height > limit)
+                    {
+                        shelves.Add(new List<Unit>());
+                        heights.Add(0f);
+                        target = shelves.Count - 1;
+                    }
+                    heights[target] += (shelves[target].Count > 0 ? o.RootGap : 0f) + u.Height;
+                    shelves[target].Add(u);
+                    shelfOf[u.Id] = target;
+                }
+                return shelves;
+            }
+
+            (float width, float height) Measure(List<List<Unit>> shelves)
+            {
+                float width = 0f, height = 0f;
+                foreach (var s in shelves)
+                {
+                    width += s.Max(u => u.Right) - s.Min(u => u.Left);
+                    height = Math.Max(height, s.Sum(u => u.Height) + (s.Count - 1) * o.RootGap);
+                }
+                return (width + (shelves.Count - 1) * o.ColumnGap * 1.5f, height);
+            }
+
+            // Try a range of stack heights and keep the one closest to the target shape.
+            float stacked = order.Sum(u => u.Height) + (order.Count - 1) * o.RootGap;
+            float tallest = order.Max(u => u.Height);
+            List<List<Unit>>? best = null;
+            float bestScore = float.PositiveInfinity;
+            for (int k = 1; k <= Math.Min(order.Count, 12); k++)
+            {
+                var shelves = Pack(Math.Max(tallest, stacked / k));
+                var (w, h) = Measure(shelves);
+                float score = Math.Max(h, w * o.EraAspect);
+                if (score < bestScore - 0.5f) { bestScore = score; best = shelves; }
+            }
+            if (best == null || best.Count < 2) return;
+
+            float cursor = best[0].Min(u => u.Left);
+            int colCursor = best[0].Min(u => u.MinCol);
+            foreach (var shelf in best)
+            {
+                float dx = cursor - shelf.Min(u => u.Left);
+                int dc = colCursor - shelf.Min(u => u.MinCol);
+                float top = 0f;
+                foreach (var u in shelf)
+                {
+                    float dy = top - u.Top;
+                    foreach (var m in u.Members) { x[m] += dx; y[m] += dy; col[m] += dc; }
+                    top += u.Height + o.RootGap;
+                }
+                cursor += shelf.Max(u => u.Right) - shelf.Min(u => u.Left) + o.ColumnGap * 1.5f;
+                colCursor += shelf.Max(u => u.MaxCol) - shelf.Min(u => u.MinCol) + 1;
+            }
+        }
+
+        private static void PlaceIsolated(IList<LayoutItem> items, bool[] isolated, float[] x, float[] y, float treeLeft, float treeRight, float rowTop, LayoutOptions o)
         {
             var list = Enumerable.Range(0, items.Count).Where(i => isolated[i]).OrderBy(i => items[i].Cost).ThenBy(i => items[i].Key, StringComparer.Ordinal).ToList();
             if (list.Count == 0) return;
 
-            float left = xOfCol[colOffset] - items[list[0]].Width / 2f;
-            float right = Math.Max(xOfCol[Math.Min(maxCol + colOffset, xOfCol.Length - 1)], left + 4 * (items[list[0]].Width + o.IsolatedGap));
+            float left = treeLeft;
+            float right = Math.Max(treeRight, left + 4 * (items[list[0]].Width + o.IsolatedGap));
 
             int start = 0;
             while (start < list.Count)

@@ -54,7 +54,7 @@ namespace NodeResearchBranches
                     items[from].Era = items[to].Era;
             }
 
-            var result = BranchLayout.Compute(items, links, new LayoutOptions { MaxFanRows = BranchesMod.Settings.maxFanRows });
+            var result = BranchLayout.Compute(items, links, new LayoutOptions { MaxFanRows = BranchesMod.Settings.maxFanRows, EraAspect = BranchesMod.Settings.eraAspect });
 
             targets.Clear();
             for (int i = 0; i < visible.Count; i++)
@@ -171,7 +171,7 @@ namespace NodeResearchBranches
         {
             unchecked
             {
-                int hash = nodes.Count * 31 + BranchesMod.Settings.maxFanRows;
+                int hash = (nodes.Count * 31 + BranchesMod.Settings.maxFanRows) * 31 + Mathf.RoundToInt(BranchesMod.Settings.eraAspect * 10f);
                 foreach (var node in nodes)
                 {
                     hash = hash * 31 + (int)node.state;
