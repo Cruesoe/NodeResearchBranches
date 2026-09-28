@@ -25,6 +25,7 @@ namespace NodeResearchBranches.Tests
             Run(nameof(ErasFormLeftToRightBlocks), ErasFormLeftToRightBlocks);
             Run(nameof(EraBranchesFollowEarlierEraOrder), EraBranchesFollowEarlierEraOrder);
             Run(nameof(ManySmallTreesWrapSideBySide), ManySmallTreesWrapSideBySide);
+            Run(nameof(TallTreeSplitsIntoStacks), TallTreeSplitsIntoStacks);
             Console.WriteLine(failures == 0 ? "All tests passed." : $"{failures} test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -202,6 +203,9 @@ namespace NodeResearchBranches.Tests
             return (items, edges);
         }
 
+        private static float Width(IList<LayoutItem> items, LayoutResult r) =>
+            Enumerable.Range(0, items.Count).Max(i => r.X[i] + items[i].Width / 2f) - Enumerable.Range(0, items.Count).Min(i => r.X[i] - items[i].Width / 2f);
+
         private static float Height(IList<LayoutItem> items, LayoutResult r) =>
             Enumerable.Range(0, items.Count).Max(i => r.Y[i] + items[i].Bottom) - Enumerable.Range(0, items.Count).Min(i => r.Y[i] - items[i].Top);
 
@@ -288,6 +292,32 @@ namespace NodeResearchBranches.Tests
             float W(LayoutResult res) => Enumerable.Range(0, items.Count).Max(i => res.X[i] + items[i].Width / 2f) - Enumerable.Range(0, items.Count).Min(i => res.X[i] - items[i].Width / 2f);
             Check(Height(items, r) < Height(items, flat) / 2f, $"trees should wrap: {Height(items, r)} vs {Height(items, flat)}");
             Check(Height(items, r) < W(r) * 1.5f, $"block should be roughly square: {W(r)} x {Height(items, r)}");
+        }
+
+        private static void TallTreeSplitsIntoStacks()
+        {
+            // One hub with 14 children, each leading to two follow-ups, one of which leads on again.
+            var items = new List<LayoutItem> { Item("Hub", 100f, 56f, true) };
+            items[0].IsFoundation = true;
+            var edges = new List<(int, int)>();
+            for (int c = 0; c < 14; c++)
+            {
+                int child = items.Count;
+                items.Add(Item("C" + c, 100f + c, 56f, true));
+                items.Add(Item("C" + c + "a", 100f, 26f));
+                items.Add(Item("C" + c + "b", 100f, 26f));
+                items.Add(Item("C" + c + "c", 100f, 26f));
+                edges.Add((0, child));
+                edges.Add((child, child + 1));
+                edges.Add((child, child + 2));
+                edges.Add((child + 2, child + 3));
+            }
+            edges.Add((5, 13));
+            var r = BranchLayout.Compute(items, edges);
+            var flat = BranchLayout.Compute(items, edges, new LayoutOptions { EraAspect = 0f });
+            AssertValid(items, edges, r);
+            Console.WriteLine($"    hub: split {Height(items, r):F0} tall x {Width(items, r):F0} wide; unsplit {Height(items, flat):F0} x {Width(items, flat):F0}");
+            Check(Height(items, r) < Height(items, flat) * 0.7f, $"tall tree should split: {Height(items, r)} vs {Height(items, flat)}");
         }
 
         private static void ShrinkingABubbleShrinksItsBranch()

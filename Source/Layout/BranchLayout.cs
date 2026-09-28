@@ -274,13 +274,21 @@ namespace NodeResearchBranches.Layout
                 y = trialY;
             }
             result.Crossings = best;
+
+            // Trees taller than the era's target height give up their tallest branches as trees of their own, so Shelve can stack them side by side.
+            var detached = new bool[total];
+            if (o.EraAspect > 0f && SplitTallTrees(all, n, kids, roots, y, isolated, detached, o, out var split))
+            {
+                roots = split;
+                y = Place(kids);
+            }
             Array.Resize(ref x, n);
             Array.Resize(ref y, n);
 
             var rootBlockOf = new Dictionary<int, int>();
             foreach (var b in blocks)
                 if (roots.Contains(b.Index)) foreach (var m in b.Members) rootBlockOf[m] = b.Index;
-            Shelve(items, g, primary, roots, rootBlockOf, isolated, x, y, col, o);
+            Shelve(items, g, primary, detached, roots, rootBlockOf, isolated, x, y, col, o);
 
             float treeTop = float.PositiveInfinity, treeBottom = float.NegativeInfinity, treeLeft = float.PositiveInfinity, treeRight = float.NegativeInfinity;
             int treeMaxCol = 0;
@@ -609,7 +617,58 @@ namespace NodeResearchBranches.Layout
             return centre;
         }
 
-        // Unconnected projects fill rows beneath the tree, as wide as the tree itself.
+        // Target height comes from the era's area at the requested shape; branches with follow-ups of their own are cut off, tallest first.
+        private static bool SplitTallTrees(IList<LayoutItem> all, int n, List<int>[] kids, List<int> roots, float[] y, bool[] isolated, bool[] detached, LayoutOptions o, out List<int> split)
+        {
+            split = roots;
+            float area = 0f;
+            for (int i = 0; i < n; i++)
+                if (!isolated[i] && !all[i].IsEmergence) area += (all[i].Width + o.ColumnGap) * (all[i].Top + all[i].Bottom + o.SiblingGap);
+            float limit = (float)Math.Sqrt(2f * area * o.EraAspect);
+
+            var height = new Dictionary<int, float>();
+            (float top, float bottom) Measure(int v)
+            {
+                float top = y[v] - all[v].Top, bottom = y[v] + all[v].Bottom;
+                foreach (var k in kids[v])
+                {
+                    var (t, b) = Measure(k);
+                    top = Math.Min(top, t);
+                    bottom = Math.Max(bottom, b);
+                }
+                height[v] = bottom - top;
+                return (top, bottom);
+            }
+            foreach (var r in roots) Measure(r);
+            if (!roots.Any(r => height[r] > limit)) return false;
+
+            var result = new List<int>();
+            bool changed = false;
+            void Cut(int v)
+            {
+                if (height[v] <= limit) return;
+                float rest = height[v];
+                foreach (var k in kids[v].Where(k => k < n && kids[k].Count > 0).OrderByDescending(k => height[k]).ToList())
+                {
+                    if (rest <= limit) break;
+                    kids[v].Remove(k);
+                    detached[k] = true;
+                    result.Add(k);
+                    rest -= height[k] + o.SiblingGap;
+                    changed = true;
+                    Cut(k);
+                }
+                foreach (var k in kids[v].ToList()) Cut(k);
+            }
+            foreach (var r in roots)
+            {
+                result.Add(r);
+                Cut(r);
+            }
+            split = result;
+            return changed;
+        }
+
         private sealed class Unit
         {
             public int Id;
@@ -624,13 +683,13 @@ namespace NodeResearchBranches.Layout
 
         // Separate trees stacked into one tall pile are wrapped into side-by-side stacks, aiming for the block shape in EraAspect.
         // A tree only moves to a later stack if nothing already placed depends on it, so prerequisites stay to the left.
-        private static void Shelve(IList<LayoutItem> items, Graph g, int[] primary, List<int> roots, Dictionary<int, int> rootBlockOf, bool[] isolated, float[] x, float[] y, int[] col, LayoutOptions o)
+        private static void Shelve(IList<LayoutItem> items, Graph g, int[] primary, bool[] detached, List<int> roots, Dictionary<int, int> rootBlockOf, bool[] isolated, float[] x, float[] y, int[] col, LayoutOptions o)
         {
             if (o.EraAspect <= 0f) return;
             int n = items.Count;
             int UnitOf(int i)
             {
-                while (primary[i] >= 0) i = primary[i];
+                while (primary[i] >= 0 && !detached[i]) i = primary[i];
                 return rootBlockOf.TryGetValue(i, out int b) ? b : i;
             }
 
@@ -743,6 +802,7 @@ namespace NodeResearchBranches.Layout
             }
         }
 
+        // Unconnected projects fill rows beneath the tree, as wide as the tree itself.
         private static void PlaceIsolated(IList<LayoutItem> items, bool[] isolated, float[] x, float[] y, float treeLeft, float treeRight, float rowTop, LayoutOptions o)
         {
             var list = Enumerable.Range(0, items.Count).Where(i => isolated[i]).OrderBy(i => items[i].Cost).ThenBy(i => items[i].Key, StringComparer.Ordinal).ToList();
