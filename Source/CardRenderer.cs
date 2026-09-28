@@ -166,7 +166,7 @@ namespace NodeResearchBranches
             var costRect = new Rect(textRect.x, nameRect.yMax, textRect.width, textRect.height - nameRect.height);
             Label(nameRect, node.def.LabelCap, 15f * zoom, locked ? TextLocked : TextNormal, TextAnchor.LowerLeft);
 
-            // Foundations are marked by their gold border, so only era advancement gets a word after the cost.
+            // Cost as a bare number; era advancement is also named.
             string cost = Mathf.RoundToInt(node.def.Cost).ToString("N0");
             if (node.isEmergence) cost += " · " + "BRM_Emergence".Translate();
             Label(costRect, cost, 10.5f * zoom, TextCost, TextAnchor.UpperLeft);
@@ -186,7 +186,7 @@ namespace NodeResearchBranches
                 x = iconRect.xMax + pad;
             }
             var labelRect = new Rect(x, rect.y, rect.xMax - x - pad, rect.height);
-            Label(labelRect, text, 11f * zoom, color, centred ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft);
+            Label(labelRect, text, 12f * zoom, color, centred ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft);
         }
 
         private static void DrawBadge(Rect rect, float zoom, string text)
