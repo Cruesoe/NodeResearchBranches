@@ -25,6 +25,8 @@ namespace NodeResearchBranches.Layout
         public float RootGap = 80f;
         public float IsolatedGap = 30f;
         public int SortPasses = 3;
+        public int MaxFanRows = 6;
+        public float FanGap = 16f;
     }
 
     public sealed class LayoutResult
@@ -126,16 +128,16 @@ namespace NodeResearchBranches.Layout
             for (int i = 0; i < n; i++)
                 isolated[i] = !items[i].IsPhantom && !items[i].IsEmergence && g.Parents[i].Count == 0 && g.Children[i].Count == 0;
 
-            var kids = new List<int>[n];
-            for (int i = 0; i < n; i++) kids[i] = new List<int>();
-            for (int i = 0; i < n; i++) if (primary[i] >= 0) kids[primary[i]].Add(i);
+            var kidList = new List<List<int>>();
+            for (int i = 0; i < n; i++) kidList.Add(new List<int>());
+            for (int i = 0; i < n; i++) if (primary[i] >= 0) kidList[primary[i]].Add(i);
 
             var roots = new List<int>();
             for (int i = 0; i < n; i++)
                 if (primary[i] < 0 && !isolated[i] && !items[i].IsEmergence) roots.Add(i);
 
-            var size = SubtreeSizes(kids, roots, n);
-            foreach (var k in kids) k.Sort((a, b) => CompareDefault(items, a, b));
+            var size = SubtreeSizes(kidList, roots, n);
+            foreach (var k in kidList) k.Sort((a, b) => CompareDefault(items, a, b));
             roots.Sort((a, b) =>
             {
                 if (items[a].IsPhantom != items[b].IsPhantom) return items[a].IsPhantom ? -1 : 1;
@@ -144,16 +146,37 @@ namespace NodeResearchBranches.Layout
                 return s != 0 ? s : CompareDefault(items, a, b);
             });
 
+            // Long fans of end-of-branch projects wrap into grid blocks, which lay out as single items.
+            var all = new List<LayoutItem>(items);
+            var colList = new List<int>(col);
+            var blocks = new List<FanBlock>();
+            for (int v = 0; v < n; v++)
+                kidList[v] = WrapFans(kidList[v], kidList, items, all, colList, blocks, o);
+            roots = WrapFans(roots, kidList, items, all, colList, blocks, o);
+
+            int total = all.Count;
+            var kids = kidList.ToArray();
+            var colAll = colList.ToArray();
+            var isMember = new bool[total];
+            foreach (var b in blocks) foreach (var m in b.Members) isMember[m] = true;
+
             int minCol = 0, maxCol = 0;
             for (int i = 0; i < n; i++) { minCol = Math.Min(minCol, col[i]); maxCol = Math.Max(maxCol, col[i]); }
             int colOffset = -minCol;
             int columns = maxCol - minCol + 1;
 
-            var y = PlaceTree(items, kids, roots, col, colOffset, columns, o);
-            var xOfCol = ColumnCentres(items, col, colOffset, columns, o);
-            var x = new float[n];
-            for (int i = 0; i < n; i++) x[i] = xOfCol[col[i] + colOffset];
+            var xOfCol = ColumnCentres(all, colAll, isMember, colOffset, columns, o);
+            var x = new float[total];
+            for (int i = 0; i < total; i++) x[i] = xOfCol[colAll[i] + colOffset];
 
+            float[] Place(List<int>[] k)
+            {
+                var py = PlaceTree(all, k, roots, colAll, colOffset, columns, o);
+                foreach (var b in blocks) b.Expand(x, py);
+                return py;
+            }
+
+            var y = Place(kids);
             var drawn = g.Edges.Where(e => !isolated[e.from] && !isolated[e.to] && !items[e.from].IsEmergence && !items[e.to].IsEmergence).ToList();
             int best = CountCrossings(drawn, x, y);
             result.InitialCrossings = best;
@@ -162,16 +185,16 @@ namespace NodeResearchBranches.Layout
             for (int pass = 0; pass < o.SortPasses && best > 0; pass++)
             {
                 var trialKids = kids.Select(k => new List<int>(k)).ToArray();
-                var bary = new float[n];
-                for (int i = 0; i < n; i++)
+                var bary = new float[total];
+                for (int i = 0; i < total; i++)
                 {
-                    var ps = g.Parents[i].Where(p => Forward(p, i)).ToList();
+                    var ps = i < n ? g.Parents[i].Where(p => Forward(p, i)).ToList() : new List<int>();
                     bary[i] = ps.Count > 0 ? ps.Average(p => y[p]) : y[i];
                 }
                 foreach (var k in trialKids)
                     k.Sort((a, b) => { int c = bary[a].CompareTo(bary[b]); return c != 0 ? c : y[a].CompareTo(y[b]); });
 
-                var trialY = PlaceTree(items, trialKids, roots, col, colOffset, columns, o);
+                var trialY = Place(trialKids);
                 int crossings = CountCrossings(drawn, x, trialY);
                 if (crossings >= best) break;
                 best = crossings;
@@ -179,6 +202,8 @@ namespace NodeResearchBranches.Layout
                 y = trialY;
             }
             result.Crossings = best;
+            Array.Resize(ref x, n);
+            Array.Resize(ref y, n);
 
             float treeTop = float.PositiveInfinity, treeBottom = float.NegativeInfinity;
             for (int i = 0; i < n; i++)
@@ -322,7 +347,62 @@ namespace NodeResearchBranches.Layout
             return c != 0 ? c : string.CompareOrdinal(items[a].Key, items[b].Key);
         }
 
-        private static int[] SubtreeSizes(List<int>[] kids, List<int> roots, int n)
+        // A grid of end-of-branch projects that lays out as one item; odd sub-columns are staggered so lines pass between bubbles.
+        private sealed class FanBlock
+        {
+            public int Index;
+            public List<int> Members = new List<int>();
+            public int Rows, Cols;
+            public float CellWidth, CellTop, CellBottom, Stagger, RowGap, ColGap, Width, Height;
+
+            public void Expand(float[] x, float[] y)
+            {
+                float left = x[Index] - Width / 2f;
+                float top = y[Index] - Height / 2f;
+                for (int k = 0; k < Members.Count; k++)
+                {
+                    int r = k % Rows, c = k / Rows;
+                    x[Members[k]] = left + c * (CellWidth + ColGap) + CellWidth / 2f;
+                    y[Members[k]] = top + (c % 2 == 1 ? Stagger : 0f) + r * (CellTop + CellBottom + RowGap) + CellTop;
+                }
+            }
+        }
+
+        private static List<int> WrapFans(List<int> siblings, List<List<int>> kids, IList<LayoutItem> items, List<LayoutItem> all, List<int> col, List<FanBlock> blocks, LayoutOptions o)
+        {
+            if (o.MaxFanRows <= 0) return siblings;
+            var result = new List<int>(siblings);
+            foreach (var group in siblings
+                .Where(s => s < items.Count && kids[s].Count == 0 && !items[s].IsPhantom && !items[s].IsEmergence)
+                .GroupBy(s => col[s]))
+            {
+                var members = group.ToList();
+                if (members.Count <= o.MaxFanRows) continue;
+
+                var block = new FanBlock { Index = all.Count, Members = members, RowGap = o.SiblingGap / 2f, ColGap = o.FanGap };
+                block.Cols = (members.Count + o.MaxFanRows - 1) / o.MaxFanRows;
+                block.Rows = (members.Count + block.Cols - 1) / block.Cols;
+                block.CellWidth = members.Max(m => items[m].Width);
+                block.CellTop = members.Max(m => items[m].Top);
+                block.CellBottom = members.Max(m => items[m].Bottom);
+                float pitch = block.CellTop + block.CellBottom + block.RowGap;
+                block.Stagger = block.Cols > 1 ? pitch / 2f : 0f;
+                block.Width = block.Cols * block.CellWidth + (block.Cols - 1) * block.ColGap;
+                block.Height = block.Rows * pitch - block.RowGap + block.Stagger;
+
+                all.Add(new LayoutItem { Key = items[members[0]].Key, Cost = items[members[0]].Cost, Width = block.Width, Top = block.Height / 2f, Bottom = block.Height / 2f });
+                col.Add(group.Key);
+                kids.Add(new List<int>());
+                blocks.Add(block);
+
+                int at = result.IndexOf(members[0]);
+                result.RemoveAll(members.Contains);
+                result.Insert(Math.Min(at, result.Count), block.Index);
+            }
+            return result;
+        }
+
+        private static int[] SubtreeSizes(IList<List<int>> kids, List<int> roots, int n)
         {
             var size = new int[n];
             int Visit(int v)
@@ -399,11 +479,11 @@ namespace NodeResearchBranches.Layout
             return y;
         }
 
-        private static float[] ColumnCentres(IList<LayoutItem> items, int[] col, int colOffset, int columns, LayoutOptions o)
+        private static float[] ColumnCentres(IList<LayoutItem> items, int[] col, bool[] skip, int colOffset, int columns, LayoutOptions o)
         {
             var width = new float[columns];
             for (int i = 0; i < items.Count; i++)
-                width[col[i] + colOffset] = Math.Max(width[col[i] + colOffset], items[i].Width);
+                if (!skip[i]) width[col[i] + colOffset] = Math.Max(width[col[i] + colOffset], items[i].Width);
 
             var centre = new float[columns];
             float cursor = 0f;

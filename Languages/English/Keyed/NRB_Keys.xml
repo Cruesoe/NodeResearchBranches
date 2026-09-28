@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
   <NRB_PhysicsReplaced>Node Research: Branches arranges the research tree from left to right, so physics and these force sliders have no effect.</NRB_PhysicsReplaced>
+  <NRB_MaxFanRows>Most bubbles stacked per branch: {0}</NRB_MaxFanRows>
+  <NRB_MaxFanRowsDesc>When one project leads to more end-of-branch projects than this, they wrap into extra columns instead of one tall stack. Lower values make the tree shorter and wider.</NRB_MaxFanRowsDesc>
+  <NRB_ResetDefault>Reset to default</NRB_ResetDefault>
 </LanguageData>

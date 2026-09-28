@@ -20,6 +20,8 @@ namespace NodeResearchBranches.Tests
             Run(nameof(IsolatedBelowTree), IsolatedBelowTree);
             Run(nameof(RandomGraphsStayValid), RandomGraphsStayValid);
             Run(nameof(ShrinkingABubbleShrinksItsBranch), ShrinkingABubbleShrinksItsBranch);
+            Run(nameof(LongFansWrapIntoGrid), LongFansWrapIntoGrid);
+            Run(nameof(LoneRootsWrapIntoGrid), LoneRootsWrapIntoGrid);
             Console.WriteLine(failures == 0 ? "All tests passed." : $"{failures} test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -180,6 +182,50 @@ namespace NodeResearchBranches.Tests
                 AssertValid(items, edges.Distinct().ToList(), r);
                 Check(r.Crossings <= r.InitialCrossings, "sibling sorting made crossings worse");
             }
+        }
+
+        // Electricity-style hub: one foundation with 25 end-of-branch follow-ups and one longer branch.
+        private static (List<LayoutItem>, List<(int, int)>) Hub()
+        {
+            var items = new List<LayoutItem> { Item("Electricity", 100f, 80f, true) };
+            items[0].IsFoundation = true;
+            var edges = new List<(int, int)>();
+            for (int i = 1; i <= 25; i++) { items.Add(Item("Leaf" + i, 100f + i, 40f)); edges.Add((0, i)); }
+            items.Add(Item("Batteries", 90f, 40f));
+            items.Add(Item("Solar", 200f, 40f));
+            edges.Add((0, 26));
+            edges.Add((26, 27));
+            edges.Add((3, 27));
+            return (items, edges);
+        }
+
+        private static float Height(IList<LayoutItem> items, LayoutResult r) =>
+            Enumerable.Range(0, items.Count).Max(i => r.Y[i] + items[i].Bottom) - Enumerable.Range(0, items.Count).Min(i => r.Y[i] - items[i].Top);
+
+        private static void LongFansWrapIntoGrid()
+        {
+            var (items, edges) = Hub();
+            var wrapped = BranchLayout.Compute(items, edges);
+            var stacked = BranchLayout.Compute(items, edges, new LayoutOptions { MaxFanRows = 0 });
+            AssertValid(items, edges, wrapped);
+            Check(Height(items, wrapped) < Height(items, stacked) / 2.5f, $"fan should wrap: {Height(items, wrapped)} vs {Height(items, stacked)}");
+            var leafX = Enumerable.Range(1, 25).Select(i => r(wrapped.X[i])).Distinct().Count();
+            Check(leafX == 5, $"25 leaves at 6 rows should use 5 sub-columns, got {leafX}");
+            var leafRows = Enumerable.Range(1, 25).Select(i => r(wrapped.Y[i])).Distinct().Count();
+            Check(leafRows <= 12, $"staggered rows should stay within 2x6, got {leafRows}");
+
+            static float r(float v) => (float)Math.Round(v, 2);
+        }
+
+        private static void LoneRootsWrapIntoGrid()
+        {
+            // 15 unrelated starting projects that each feed one shared follow-up.
+            var items = Enumerable.Range(0, 15).Select(i => Item("Root" + i, 100f + i)).ToList();
+            items.Add(Item("Capstone", 500f));
+            var edges = Enumerable.Range(0, 15).Select(i => (i, 15)).ToList();
+            var r = BranchLayout.Compute(items, edges);
+            AssertValid(items, edges, r);
+            Check(Height(items, r) < Height(items, BranchLayout.Compute(items, edges, new LayoutOptions { MaxFanRows = 0 })), "lone roots should wrap");
         }
 
         private static void ShrinkingABubbleShrinksItsBranch()

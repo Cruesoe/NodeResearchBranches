@@ -39,7 +39,7 @@ namespace NodeResearchBranches
                 if (index.TryGetValue(edge.from, out int from) && index.TryGetValue(edge.to, out int to))
                     links.Add((from, to));
 
-            var result = BranchLayout.Compute(items, links);
+            var result = BranchLayout.Compute(items, links, new LayoutOptions { MaxFanRows = BranchesMod.Settings.maxFanRows });
 
             targets.Clear();
             for (int i = 0; i < visible.Count; i++)
@@ -137,7 +137,7 @@ namespace NodeResearchBranches
         {
             unchecked
             {
-                int hash = nodes.Count;
+                int hash = nodes.Count * 31 + BranchesMod.Settings.maxFanRows;
                 foreach (var node in nodes)
                 {
                     hash = hash * 31 + (int)node.state;
