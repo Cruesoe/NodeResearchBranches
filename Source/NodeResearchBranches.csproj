@@ -3,7 +3,7 @@
     <RootNamespace>NodeResearchBranches</RootNamespace>
     <AssemblyName>NodeResearchBranches</AssemblyName>
     <Nullable>enable</Nullable>
-    <UnityModules>CoreModule;IMGUIModule</UnityModules>
+    <UnityModules>CoreModule;IMGUIModule;TextRenderingModule</UnityModules>
     <!-- Node Research is built against net48; the game loads both, so accept the reference from net472. -->
     <ResolveAssemblyReferenceIgnoreTargetFrameworkAttributeVersionMismatch>true</ResolveAssemblyReferenceIgnoreTargetFrameworkAttributeVersionMismatch>
     <NodeResearchDll Condition="'$(NodeResearchDll)' == ''">C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\3729878405\1.6\Assemblies\BetterResearchMenu.dll</NodeResearchDll>

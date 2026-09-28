@@ -4,7 +4,7 @@
   <author>Cruesoe</author>
   <packageId>cruesoe.noderesearch.branches</packageId>
   <modVersion>260928</modVersion>
-  <description>Rearranges Node Research's bubbles into a tree that grows from left to right, with each branch fanning out from the research it builds on.</description>
+  <description>Rearranges Node Research into a tree of research cards that grows from left to right, with each branch fanning out from the research it builds on.</description>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>

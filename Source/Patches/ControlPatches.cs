@@ -18,11 +18,14 @@ namespace NodeResearchBranches.Patches
             public float center, spacing, contracting;
         }
 
-        public static void Prefix(Rect controlAreaRect, out Saved __state)
+        public static void Prefix(MainTabWindow_BetterResearch __instance, Rect controlAreaRect, out Saved __state)
         {
             var s = BetterResearchMenuMod.settings;
             __state = new Saved { physics = s.physicsEnabled, center = s.centerForceMultiplier, spacing = s.spacingForceMultiplier, contracting = s.contractingForceMultiplier };
             s.physicsEnabled = false;
+
+            // The node loop has just run with its drawing blanked out; the cards go here, under the controls and search bar.
+            if (Event.current.type == EventType.Repaint) CardRenderer.DrawAll(__instance);
 
             // Swallow clicks so the button and sliders never change or save Node Research's settings.
             var ev = Event.current;

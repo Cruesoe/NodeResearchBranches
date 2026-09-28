@@ -39,6 +39,7 @@ namespace NodeResearchBranches.Patches
         public static void DoWindowContentsPrefix(MainTabWindow_BetterResearch __instance, out HiddenLines __state)
         {
             __state = default;
+            CardRenderer.Zoom = BranchesStartup.ZoomField(__instance);
             var type = Event.current.type;
 
             // Bubbles can still be clicked, but not dragged out of the tree.

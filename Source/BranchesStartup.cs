@@ -19,6 +19,9 @@ namespace NodeResearchBranches
         public static AccessTools.FieldRef<MainTabWindow_BetterResearch, List<ResearchEdge>> Edges = null!;
         public static AccessTools.FieldRef<MainTabWindow_BetterResearch, float> PhysicsTemperature = null!;
         public static AccessTools.FieldRef<MainTabWindow_BetterResearch, ResearchNode> SelectedNode = null!;
+        public static AccessTools.FieldRef<MainTabWindow_BetterResearch, float> ZoomField = null!;
+        public static AccessTools.FieldRef<MainTabWindow_BetterResearch, Rect> GraphRect = null!;
+        public static MethodInfo BottomBarHeight = null!;
         public static AccessTools.FieldRef<Vector2> CameraOffset = null!;
         public static AccessTools.FieldRef<Dictionary<string, Vector2>> CachedCameraOffsets = null!;
         public static AccessTools.FieldRef<TechLevel> CurrentEra = null!;
@@ -48,6 +51,11 @@ namespace NodeResearchBranches
             var update = Method("WindowUpdate");
             var contents = Method("DoWindowContents");
             var controls = Method("DrawGraphControls");
+            var hitTest = Method("IsOverNode");
+            BottomBarHeight = AccessTools.PropertyGetter(Window, "BottomBarHeight");
+            if (BottomBarHeight == null) missing.Add("BottomBarHeight");
+            var shape = AccessTools.PropertyGetter(typeof(ResearchNode), "DrawAsSquare");
+            if (shape == null) missing.Add("ResearchNode.DrawAsSquare");
             ComputeCentroidOffset = Method("ComputeCentroidOffset");
             CurTabGetter = AccessTools.PropertyGetter(typeof(MainTabWindow_Research), "CurTab");
             if (CurTabGetter == null) missing.Add("MainTabWindow_Research.CurTab");
@@ -59,6 +67,8 @@ namespace NodeResearchBranches
             var cameraCache = Field("cachedCameraOffsets");
             var era = Field("currentEra");
             var selected = Field("selectedNode");
+            var zoom = Field("zoom");
+            var graphRect = Field("graphRect");
 
             if (missing.Count > 0)
             {
@@ -70,6 +80,8 @@ namespace NodeResearchBranches
             Edges = AccessTools.FieldRefAccess<MainTabWindow_BetterResearch, List<ResearchEdge>>(edges);
             PhysicsTemperature = AccessTools.FieldRefAccess<MainTabWindow_BetterResearch, float>(temperature);
             SelectedNode = AccessTools.FieldRefAccess<MainTabWindow_BetterResearch, ResearchNode>(selected);
+            ZoomField = AccessTools.FieldRefAccess<MainTabWindow_BetterResearch, float>(zoom);
+            GraphRect = AccessTools.FieldRefAccess<MainTabWindow_BetterResearch, Rect>(graphRect);
             CameraOffset = AccessTools.StaticFieldRefAccess<Vector2>(camera);
             CachedCameraOffsets = AccessTools.StaticFieldRefAccess<Dictionary<string, Vector2>>(cameraCache);
             CurrentEra = AccessTools.StaticFieldRefAccess<TechLevel>(era);
@@ -82,7 +94,10 @@ namespace NodeResearchBranches
             harmony.Patch(update, postfix: new HarmonyMethod(typeof(LayoutPatches), nameof(LayoutPatches.WindowUpdatePostfix)));
             harmony.Patch(contents,
                 prefix: new HarmonyMethod(typeof(LayoutPatches), nameof(LayoutPatches.DoWindowContentsPrefix)),
+                transpiler: new HarmonyMethod(typeof(CardPatches), nameof(CardPatches.RemoveBubbleDrawing)),
                 finalizer: new HarmonyMethod(typeof(LayoutPatches), nameof(LayoutPatches.DoWindowContentsFinalizer)));
+            harmony.Patch(hitTest, prefix: new HarmonyMethod(typeof(CardPatches), nameof(CardPatches.HitTestPrefix)));
+            harmony.Patch(shape, postfix: new HarmonyMethod(typeof(CardPatches), nameof(CardPatches.ShapePostfix)));
             harmony.Patch(controls,
                 prefix: new HarmonyMethod(typeof(ControlPatches), nameof(ControlPatches.Prefix)),
                 postfix: new HarmonyMethod(typeof(ControlPatches), nameof(ControlPatches.Postfix)));

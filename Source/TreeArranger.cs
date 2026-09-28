@@ -9,14 +9,6 @@ namespace NodeResearchBranches
     /// <summary>Feeds Node Research's bubbles through the branch layout and holds each bubble to its place.</summary>
     public static class TreeArranger
     {
-        // Node Research's world-unit bubble sizes (MainTabWindow_BetterResearch NodeSizeExpanded/Minimized).
-        private const float SizeExpanded = 80f;
-        private const float SizeMinimized = 40f;
-        private const float LabelWidth = 200f;
-        private const float LabelHeight = 62f;
-        private const float EraLabelWidth = 150f;
-        private const float EraLabelHeight = 24f;
-        private const float RingPadding = 10f;
 
         private static readonly Dictionary<ResearchNode, Vector2> targets = new Dictionary<ResearchNode, Vector2>();
         private static readonly HashSet<ResearchEdge> crossEraEdges = new HashSet<ResearchEdge>();
@@ -123,48 +115,19 @@ namespace NodeResearchBranches
                 Era = (int)(node.isPhantom ? node.phantomEra : node.isGroupNode ? node.groupNodeDef?.techLevel ?? TechLevel.Undefined : node.def.techLevel),
             };
 
-            if (node.isPhantom || node.isGroupNode)
-            {
-                item.Key = node.isPhantom ? "~era_" + (int)node.phantomEra : "~group_" + node.groupNodeDef?.defName;
-                item.Width = EraLabelWidth;
-                item.Top = SizeMinimized / 2f;
-                item.Bottom = SizeMinimized / 2f + EraLabelHeight;
-                return item;
-            }
-
-            item.Key = node.def.defName;
-            item.Cost = node.def.baseCost;
-            float size = BubbleSize(node);
-            if (node.state == NodeState.Expanded)
-            {
-                item.Width = Mathf.Max(size + RingPadding * 2f, LabelWidth);
-                item.Top = size / 2f + RingPadding;
-                item.Bottom = size / 2f + RingPadding + LabelHeight;
-            }
+            if (node.isPhantom) item.Key = "~era_" + (int)node.phantomEra;
+            else if (node.isGroupNode) item.Key = "~group_" + node.groupNodeDef?.defName;
             else
             {
-                item.Width = size;
-                item.Top = size / 2f;
-                item.Bottom = size / 2f;
+                item.Key = node.def.defName;
+                item.Cost = node.def.baseCost;
             }
+
+            var size = CardRenderer.Size(node);
+            item.Width = size.x;
+            item.Top = size.y / 2f;
+            item.Bottom = size.y / 2f;
             return item;
-        }
-
-        // Mirrors ResearchNode.GetNodeSize, using the target scale so a growing bubble lays out once, not every frame.
-        // Dots are sized as minimized bubbles, since that is how they draw under the cursor.
-        private static float BubbleSize(ResearchNode node)
-        {
-            float scale = node.TargetDynamicScale;
-            float size;
-            if (node.state == NodeState.Expanded)
-                size = node.UsesLargeNodeStyle ? SizeExpanded * 2.6f : SizeExpanded * scale;
-            else if (node.UsesLargeNodeStyle)
-                size = SizeMinimized * Mathf.Max(2.275f, 2.4375f * node.CollapsedShrink);
-            else
-                size = SizeMinimized * Mathf.Sqrt(scale) * node.CollapsedShrink;
-
-            if (node.isEmergence && node.state != NodeState.Expanded) size *= 1.5f;
-            return size * node.customScale;
         }
 
         private static int SizeHash(List<ResearchNode> nodes)
@@ -176,7 +139,8 @@ namespace NodeResearchBranches
                 {
                     hash = hash * 31 + (int)node.state;
                     if (node.state == NodeState.Hidden) continue;
-                    hash = hash * 31 + Mathf.RoundToInt(BubbleSize(node) * 4f);
+                    var size = CardRenderer.Size(node);
+                    hash = hash * 31 + Mathf.RoundToInt(size.x * 4f) * 7919 + Mathf.RoundToInt(size.y * 4f);
                 }
                 return hash;
             }
