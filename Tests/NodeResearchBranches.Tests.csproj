@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NodeResearchBranches.Tests</RootNamespace>
+    <AssemblyName>NodeResearchBranches.Tests</AssemblyName>
+    <Nullable>enable</Nullable>
+    <IsRimWorldMod>false</IsRimWorldMod>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Linked rather than referenced: Source/Layout has no RimWorld or Unity dependencies. -->
+    <Compile Include="..\Source\Layout\*.cs" LinkBase="Layout" />
+  </ItemGroup>
+</Project>

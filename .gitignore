@@ -1,0 +1,25 @@
+## IDE and user-local settings
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.slnx
+
+## Build and test outputs
+[Bb]in/
+[Oo]bj/
+*.pdb
+*.cache
+
+## OS
+Thumbs.db
+Desktop.ini
+
+## Local build files
+Directory.Build.props
+Directory.Build.targets
+
+## Agent notes, not part of the mod
+AGENTS.md
+CLAUDE.md

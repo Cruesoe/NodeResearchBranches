@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Node Research: Branches</name>
+  <author>Cruesoe</author>
+  <packageId>cruesoe.noderesearch.branches</packageId>
+  <modVersion>260928</modVersion>
+  <description>Rearranges Node Research's bubbles into a tree that grows from left to right, with each branch fanning out from the research it builds on.</description>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+      <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+    </li>
+    <li>
+      <packageId>ferny.noderesearch</packageId>
+      <displayName>Node Research</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/3729878405</steamWorkshopUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+    <li>ferny.noderesearch</li>
+  </loadAfter>
+</ModMetaData>
