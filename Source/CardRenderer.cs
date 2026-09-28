@@ -162,13 +162,13 @@ namespace NodeResearchBranches
             DrawIcon(iconRect, node.def, locked);
 
             var textRect = new Rect(iconRect.xMax + pad, rect.y + pad * 0.5f, rect.xMax - iconRect.xMax - pad * 2f - (locked ? 14f * zoom : 0f), rect.height - pad);
-            var nameRect = new Rect(textRect.x, textRect.y, textRect.width, textRect.height * 0.64f);
+            var nameRect = new Rect(textRect.x, textRect.y, textRect.width, textRect.height * 0.66f);
             var costRect = new Rect(textRect.x, nameRect.yMax, textRect.width, textRect.height - nameRect.height);
-            Label(nameRect, node.def.LabelCap, 13f * zoom, locked ? TextLocked : TextNormal, TextAnchor.LowerLeft);
+            Label(nameRect, node.def.LabelCap, 15f * zoom, locked ? TextLocked : TextNormal, TextAnchor.LowerLeft);
 
-            string cost = "BRM_Points".Translate(node.def.Cost);
-            if (node.isFoundation) cost += " · " + "BRM_Foundation".Translate();
-            else if (node.isEmergence) cost += " · " + "BRM_Emergence".Translate();
+            // Foundations are marked by their gold border, so only era advancement gets a word after the cost.
+            string cost = Mathf.RoundToInt(node.def.Cost).ToString("N0");
+            if (node.isEmergence) cost += " · " + "BRM_Emergence".Translate();
             Label(costRect, cost, 10.5f * zoom, TextCost, TextAnchor.UpperLeft);
         }
 
