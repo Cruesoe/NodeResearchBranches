@@ -13,6 +13,7 @@ namespace NodeResearchBranches.Layout
         public bool IsEmergence;
         public bool IsPhantom;
         public int PhantomOrder;
+        public int Era;
         public float Width = 40f;
         public float Top = 20f;
         public float Bottom = 20f;
@@ -27,6 +28,7 @@ namespace NodeResearchBranches.Layout
         public int SortPasses = 3;
         public int MaxFanRows = 6;
         public float FanGap = 16f;
+        public float EraGap = 220f;
     }
 
     public sealed class LayoutResult
@@ -107,9 +109,59 @@ namespace NodeResearchBranches.Layout
             }
         }
 
+        /// <summary>Lays out each era as its own tree, then places the eras left to right in order.</summary>
         public static LayoutResult Compute(IList<LayoutItem> items, IList<(int from, int to)> edges, LayoutOptions? options = null)
         {
             var o = options ?? new LayoutOptions();
+            int n = items.Count;
+            var real = Enumerable.Range(0, n).Where(i => !items[i].IsPhantom).ToList();
+            var eras = real.Select(i => items[i].Era).Distinct().OrderBy(e => e).ToList();
+            if (eras.Count <= 1) return ComputeEra(items, edges, o);
+
+            // Era bubbles for earlier eras belong with the first block.
+            int EraOf(int i) => items[i].IsPhantom ? eras[0] : items[i].Era;
+
+            var result = new LayoutResult { X = new float[n], Y = new float[n], Column = new int[n], PrimaryParent = new int[n] };
+            float cursor = 0f;
+            int columnBase = 0;
+            foreach (var era in eras)
+            {
+                var members = Enumerable.Range(0, n).Where(i => EraOf(i) == era).ToList();
+                var local = new Dictionary<int, int>();
+                for (int k = 0; k < members.Count; k++) local[members[k]] = k;
+                var sub = members.Select(i => items[i]).ToList();
+                var subEdges = edges.Where(e => local.ContainsKey(e.from) && local.ContainsKey(e.to)).Select(e => (local[e.from], local[e.to])).ToList();
+                var r = ComputeEra(sub, subEdges, o);
+
+                float left = float.PositiveInfinity, right = float.NegativeInfinity;
+                for (int k = 0; k < sub.Count; k++)
+                {
+                    left = Math.Min(left, r.X[k] - sub[k].Width / 2f);
+                    right = Math.Max(right, r.X[k] + sub[k].Width / 2f);
+                }
+                float shift = cursor - left;
+                int minCol = r.Column.Min();
+                for (int k = 0; k < sub.Count; k++)
+                {
+                    int i = members[k];
+                    result.X[i] = r.X[k] + shift;
+                    result.Y[i] = r.Y[k];
+                    result.Column[i] = r.Column[k] - minCol + columnBase;
+                    result.PrimaryParent[i] = r.PrimaryParent[k] >= 0 ? members[r.PrimaryParent[k]] : -1;
+                }
+                cursor += right - left + o.EraGap;
+                columnBase += r.Column.Max() - minCol + 1;
+                result.InitialCrossings += r.InitialCrossings;
+                result.Crossings += r.Crossings;
+            }
+
+            float centre = (cursor - o.EraGap) / 2f;
+            for (int i = 0; i < n; i++) result.X[i] -= centre;
+            return result;
+        }
+
+        private static LayoutResult ComputeEra(IList<LayoutItem> items, IList<(int from, int to)> edges, LayoutOptions o)
+        {
             int n = items.Count;
             var result = new LayoutResult { X = new float[n], Y = new float[n], Column = new int[n], PrimaryParent = new int[n] };
             if (n == 0) return result;

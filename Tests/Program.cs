@@ -22,6 +22,7 @@ namespace NodeResearchBranches.Tests
             Run(nameof(ShrinkingABubbleShrinksItsBranch), ShrinkingABubbleShrinksItsBranch);
             Run(nameof(LongFansWrapIntoGrid), LongFansWrapIntoGrid);
             Run(nameof(LoneRootsWrapIntoGrid), LoneRootsWrapIntoGrid);
+            Run(nameof(ErasFormLeftToRightBlocks), ErasFormLeftToRightBlocks);
             Console.WriteLine(failures == 0 ? "All tests passed." : $"{failures} test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -171,7 +172,7 @@ namespace NodeResearchBranches.Tests
             {
                 int n = rng.Next(5, 120);
                 var items = Enumerable.Range(0, n).Select(i => Item("P" + i, rng.Next(50, 3000), rng.Next(3) switch { 0 => 20f, 1 => 40f, _ => 80f }, rng.Next(3) == 0)).ToList();
-                for (int i = 0; i < n; i++) items[i].IsFoundation = rng.Next(10) == 0;
+                for (int i = 0; i < n; i++) { items[i].IsFoundation = rng.Next(10) == 0; if (trial % 2 == 1) items[i].Era = rng.Next(1, 5); }
                 var edges = new List<(int, int)>();
                 for (int c = 1; c < n; c++)
                 {
@@ -179,7 +180,7 @@ namespace NodeResearchBranches.Tests
                     for (int k = 0; k < parents; k++) edges.Add((rng.Next(0, c), c));
                 }
                 var r = BranchLayout.Compute(items, edges);
-                AssertValid(items, edges.Distinct().ToList(), r);
+                AssertValid(items, edges.Distinct().Where(e => items[e.Item1].Era <= items[e.Item2].Era).ToList(), r);
                 Check(r.Crossings <= r.InitialCrossings, "sibling sorting made crossings worse");
             }
         }
@@ -226,6 +227,25 @@ namespace NodeResearchBranches.Tests
             var r = BranchLayout.Compute(items, edges);
             AssertValid(items, edges, r);
             Check(Height(items, r) < Height(items, BranchLayout.Compute(items, edges, new LayoutOptions { MaxFanRows = 0 })), "lone roots should wrap");
+        }
+
+        private static void ErasFormLeftToRightBlocks()
+        {
+            // Animal(1): Tame; Neolithic(2): Fire -> Cooking; Medieval(3): Smithing; Industrial(4): Electricity (no prerequisites) -> Batteries.
+            var items = new List<LayoutItem>
+            {
+                Item("Tame"), Item("Fire"), Item("Cooking"), Item("Smithing"), Item("Electricity", 100f, 80f, true), Item("Batteries"),
+            };
+            int[] era = { 1, 2, 2, 3, 4, 4 };
+            for (int i = 0; i < items.Count; i++) items[i].Era = era[i];
+            var edges = new List<(int, int)> { (0, 1), (1, 2), (2, 3), (4, 5) };
+            var r = BranchLayout.Compute(items, edges);
+            AssertValid(items, edges, r);
+            for (int i = 0; i < items.Count; i++)
+                for (int j = 0; j < items.Count; j++)
+                    if (era[i] < era[j])
+                        Check(r.X[i] + items[i].Width / 2f < r.X[j] - items[j].Width / 2f, $"{items[i].Key} (era {era[i]}) should sit left of {items[j].Key} (era {era[j]})");
+            Check(r.Column[4] > r.Column[1], "Electricity must not share Fire's column");
         }
 
         private static void ShrinkingABubbleShrinksItsBranch()

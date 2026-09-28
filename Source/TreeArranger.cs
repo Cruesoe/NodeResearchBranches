@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterResearchMenu;
 using NodeResearchBranches.Layout;
+using RimWorld;
 using UnityEngine;
 
 namespace NodeResearchBranches
@@ -38,6 +39,15 @@ namespace NodeResearchBranches
             foreach (var edge in edges)
                 if (index.TryGetValue(edge.from, out int from) && index.TryGetValue(edge.to, out int to))
                     links.Add((from, to));
+
+            // A group without its own tech level joins the earliest era it leads into.
+            foreach (var (from, to) in links)
+            {
+                var group = visible[from];
+                bool unset = group.isGroupNode && (group.groupNodeDef == null || group.groupNodeDef.techLevel == TechLevel.Undefined);
+                if (unset && items[to].Era > 0 && (items[from].Era == 0 || items[to].Era < items[from].Era))
+                    items[from].Era = items[to].Era;
+            }
 
             var result = BranchLayout.Compute(items, links, new LayoutOptions { MaxFanRows = BranchesMod.Settings.maxFanRows });
 
@@ -87,6 +97,7 @@ namespace NodeResearchBranches
                 PhantomOrder = (int)node.phantomEra,
                 IsFoundation = node.isFoundation,
                 IsEmergence = node.isEmergence,
+                Era = (int)(node.isPhantom ? node.phantomEra : node.isGroupNode ? node.groupNodeDef?.techLevel ?? TechLevel.Undefined : node.def.techLevel),
             };
 
             if (node.isPhantom || node.isGroupNode)
