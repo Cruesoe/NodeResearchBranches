@@ -131,7 +131,18 @@ namespace NodeResearchBranches.Layout
                 for (int k = 0; k < members.Count; k++) local[members[k]] = k;
                 var sub = members.Select(i => items[i]).ToList();
                 var subEdges = edges.Where(e => local.ContainsKey(e.from) && local.ContainsKey(e.to)).Select(e => (local[e.from], local[e.to])).ToList();
-                var r = ComputeEra(sub, subEdges, o);
+                // Where each project's prerequisites from earlier eras already sit.
+                var anchor = new float[sub.Count];
+                for (int k = 0; k < sub.Count; k++)
+                {
+                    var ys = edges.Where(e => e.to == members[k] && !local.ContainsKey(e.from) && EraOf(e.from) < era).Select(e => result.Y[e.from]).ToList();
+                    anchor[k] = ys.Count > 0 ? ys.Average() : float.NaN;
+                }
+                var r = ComputeEra(sub, subEdges, o, anchor);
+
+                // Slide the block vertically to sit level with those prerequisites.
+                var offsets = Enumerable.Range(0, sub.Count).Where(k => !float.IsNaN(anchor[k])).Select(k => anchor[k] - r.Y[k]).ToList();
+                float dy = offsets.Count > 0 ? offsets.Average() : 0f;
 
                 float left = float.PositiveInfinity, right = float.NegativeInfinity;
                 for (int k = 0; k < sub.Count; k++)
@@ -145,7 +156,7 @@ namespace NodeResearchBranches.Layout
                 {
                     int i = members[k];
                     result.X[i] = r.X[k] + shift;
-                    result.Y[i] = r.Y[k];
+                    result.Y[i] = r.Y[k] + dy;
                     result.Column[i] = r.Column[k] - minCol + columnBase;
                     result.PrimaryParent[i] = r.PrimaryParent[k] >= 0 ? members[r.PrimaryParent[k]] : -1;
                 }
@@ -156,11 +167,13 @@ namespace NodeResearchBranches.Layout
             }
 
             float centre = (cursor - o.EraGap) / 2f;
-            for (int i = 0; i < n; i++) result.X[i] -= centre;
+            float top = Enumerable.Range(0, n).Min(i => result.Y[i] - items[i].Top);
+            float bottom = Enumerable.Range(0, n).Max(i => result.Y[i] + items[i].Bottom);
+            for (int i = 0; i < n; i++) { result.X[i] -= centre; result.Y[i] -= (top + bottom) / 2f; }
             return result;
         }
 
-        private static LayoutResult ComputeEra(IList<LayoutItem> items, IList<(int from, int to)> edges, LayoutOptions o)
+        private static LayoutResult ComputeEra(IList<LayoutItem> items, IList<(int from, int to)> edges, LayoutOptions o, float[]? anchor = null)
         {
             int n = items.Count;
             var result = new LayoutResult { X = new float[n], Y = new float[n], Column = new int[n], PrimaryParent = new int[n] };
@@ -178,7 +191,8 @@ namespace NodeResearchBranches.Layout
             var primary = ChoosePrimaryParents(g, items, order, col, Forward);
             var isolated = new bool[n];
             for (int i = 0; i < n; i++)
-                isolated[i] = !items[i].IsPhantom && !items[i].IsEmergence && g.Parents[i].Count == 0 && g.Children[i].Count == 0;
+                isolated[i] = !items[i].IsPhantom && !items[i].IsEmergence && g.Parents[i].Count == 0 && g.Children[i].Count == 0
+                    && (anchor == null || float.IsNaN(anchor[i]));
 
             var kidList = new List<List<int>>();
             for (int i = 0; i < n; i++) kidList.Add(new List<int>());
@@ -190,10 +204,15 @@ namespace NodeResearchBranches.Layout
 
             var size = SubtreeSizes(kidList, roots, n);
             foreach (var k in kidList) k.Sort((a, b) => CompareDefault(items, a, b));
+            var rootAnchor = SubtreeAnchors(kidList, roots, anchor);
             roots.Sort((a, b) =>
             {
                 if (items[a].IsPhantom != items[b].IsPhantom) return items[a].IsPhantom ? -1 : 1;
                 if (items[a].IsPhantom) return items[a].PhantomOrder.CompareTo(items[b].PhantomOrder);
+                // Branches fed from earlier eras follow those eras' order; the rest follow, largest first.
+                float aa = rootAnchor[a], ab = rootAnchor[b];
+                if (float.IsNaN(aa) != float.IsNaN(ab)) return float.IsNaN(aa) ? 1 : -1;
+                if (!float.IsNaN(aa) && aa != ab) return aa.CompareTo(ab);
                 int s = size[b].CompareTo(size[a]);
                 return s != 0 ? s : CompareDefault(items, a, b);
             });
@@ -450,6 +469,27 @@ namespace NodeResearchBranches.Layout
                 int at = result.IndexOf(members[0]);
                 result.RemoveAll(members.Contains);
                 result.Insert(Math.Min(at, result.Count), block.Index);
+            }
+            return result;
+        }
+
+        // Average anchor across each root's branch; NaN when nothing in it has one.
+        private static Dictionary<int, float> SubtreeAnchors(IList<List<int>> kids, List<int> roots, float[]? anchor)
+        {
+            var result = new Dictionary<int, float>();
+            foreach (var r in roots)
+            {
+                float sum = 0f;
+                int count = 0;
+                var stack = new Stack<int>();
+                stack.Push(r);
+                while (stack.Count > 0)
+                {
+                    int v = stack.Pop();
+                    if (anchor != null && !float.IsNaN(anchor[v])) { sum += anchor[v]; count++; }
+                    foreach (var k in kids[v]) stack.Push(k);
+                }
+                result[r] = count > 0 ? sum / count : float.NaN;
             }
             return result;
         }

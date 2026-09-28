@@ -23,6 +23,7 @@ namespace NodeResearchBranches.Tests
             Run(nameof(LongFansWrapIntoGrid), LongFansWrapIntoGrid);
             Run(nameof(LoneRootsWrapIntoGrid), LoneRootsWrapIntoGrid);
             Run(nameof(ErasFormLeftToRightBlocks), ErasFormLeftToRightBlocks);
+            Run(nameof(EraBranchesFollowEarlierEraOrder), EraBranchesFollowEarlierEraOrder);
             Console.WriteLine(failures == 0 ? "All tests passed." : $"{failures} test(s) failed.");
             return failures == 0 ? 0 : 1;
         }
@@ -246,6 +247,23 @@ namespace NodeResearchBranches.Tests
                     if (era[i] < era[j])
                         Check(r.X[i] + items[i].Width / 2f < r.X[j] - items[j].Width / 2f, $"{items[i].Key} (era {era[i]}) should sit left of {items[j].Key} (era {era[j]})");
             Check(r.Column[4] > r.Column[1], "Electricity must not share Fire's column");
+        }
+
+        private static void EraBranchesFollowEarlierEraOrder()
+        {
+            // Neolithic: two trees, Big (3 nodes) above Small. Medieval: MedA fed by Small, MedB fed by Big, each with a follow-up.
+            var items = new List<LayoutItem>
+            {
+                Item("Big", 50f), Item("Big1"), Item("Big2"), Item("Small", 60f), Item("Small1"),
+                Item("MedA", 10f), Item("MedA1"), Item("MedB", 20f), Item("MedB1"),
+            };
+            int[] era = { 2, 2, 2, 2, 2, 3, 3, 3, 3 };
+            for (int i = 0; i < items.Count; i++) items[i].Era = era[i];
+            var edges = new List<(int, int)> { (0, 1), (0, 2), (3, 4), (5, 6), (7, 8), (4, 5), (2, 7) };
+            var r = BranchLayout.Compute(items, edges);
+            AssertValid(items, edges, r);
+            Check(r.Y[0] < r.Y[3], "Big should sit above Small");
+            Check(r.Y[7] < r.Y[5], "MedB (fed by Big) should sit above MedA (fed by Small), despite costing more");
         }
 
         private static void ShrinkingABubbleShrinksItsBranch()

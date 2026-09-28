@@ -30,12 +30,37 @@ namespace NodeResearchBranches.Patches
             TreeArranger.Maintain(BranchesStartup.Nodes(__instance), BranchesStartup.Edges(__instance));
         }
 
-        // Bubbles can still be clicked, but not dragged out of the tree.
-        public static void DoWindowContentsPrefix(MainTabWindow_BetterResearch __instance)
+        public struct HiddenLines
         {
-            if (Event.current.type != EventType.MouseDrag) return;
-            foreach (var node in BranchesStartup.Nodes(__instance))
-                node.isDragging = false;
+            public List<ResearchEdge>? all;
+            public int version;
+        }
+
+        public static void DoWindowContentsPrefix(MainTabWindow_BetterResearch __instance, out HiddenLines __state)
+        {
+            __state = default;
+            var type = Event.current.type;
+
+            // Bubbles can still be clicked, but not dragged out of the tree.
+            if (type == EventType.MouseDrag)
+                foreach (var node in BranchesStartup.Nodes(__instance))
+                    node.isDragging = false;
+
+            // Leave out hidden lines while painting only; the full list is put back afterwards.
+            if (type != EventType.Repaint) return;
+            var edges = BranchesStartup.Edges(__instance);
+            var selected = BranchesStartup.SelectedNode(__instance);
+            __state = new HiddenLines { all = new List<ResearchEdge>(edges), version = TreeArranger.Version };
+            edges.RemoveAll(e => TreeArranger.IsHiddenLine(e, selected));
+        }
+
+        public static void DoWindowContentsFinalizer(MainTabWindow_BetterResearch __instance, HiddenLines __state)
+        {
+            // Skipped if Node Research rebuilt its lists mid-draw, since the saved copy is then stale.
+            if (__state.all == null || __state.version != TreeArranger.Version) return;
+            var edges = BranchesStartup.Edges(__instance);
+            edges.Clear();
+            edges.AddRange(__state.all);
         }
 
         // Node Research checked its saved camera against the old radial positions; check it against the tree instead.

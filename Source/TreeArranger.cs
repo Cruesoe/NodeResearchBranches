@@ -19,7 +19,12 @@ namespace NodeResearchBranches
         private const float RingPadding = 10f;
 
         private static readonly Dictionary<ResearchNode, Vector2> targets = new Dictionary<ResearchNode, Vector2>();
+        private static readonly HashSet<ResearchEdge> crossEraEdges = new HashSet<ResearchEdge>();
+        private static readonly HashSet<ResearchEdge> extraEdges = new HashSet<ResearchEdge>();
         private static List<ResearchNode>? lastNodes;
+
+        /// <summary>Bumped on every layout, so callers can tell the node and edge lists were rebuilt.</summary>
+        public static int Version;
         private static int lastHash;
 
         public static void Arrange(List<ResearchNode> nodes, List<ResearchEdge> edges, bool instant)
@@ -66,8 +71,26 @@ namespace NodeResearchBranches
                 }
             }
 
+            crossEraEdges.Clear();
+            extraEdges.Clear();
+            foreach (var edge in edges)
+            {
+                if (!index.TryGetValue(edge.from, out int from) || !index.TryGetValue(edge.to, out int to)) continue;
+                if (!edge.from.isPhantom && !edge.to.isPhantom && items[from].Era != items[to].Era) crossEraEdges.Add(edge);
+                else if (!edge.isGroupEdge && result.PrimaryParent[to] != from) extraEdges.Add(edge);
+            }
+
+            Version++;
             lastNodes = nodes;
             lastHash = SizeHash(nodes);
+        }
+
+        /// <summary>Whether a line is left out of the drawing because neither end is selected.</summary>
+        public static bool IsHiddenLine(ResearchEdge edge, ResearchNode? selected)
+        {
+            if (edge.from == selected || edge.to == selected) return false;
+            if (BranchesMod.Settings.hideCrossEraLines && crossEraEdges.Contains(edge)) return true;
+            return BranchesMod.Settings.hideExtraLines && extraEdges.Contains(edge);
         }
 
         /// <summary>Re-arranges when bubbles appear, vanish or change size; otherwise pins them in place.</summary>

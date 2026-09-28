@@ -7,10 +7,14 @@ namespace NodeResearchBranches
     {
         public const int DefaultMaxFanRows = 6;
         public int maxFanRows = DefaultMaxFanRows;
+        public bool hideCrossEraLines = true;
+        public bool hideExtraLines = false;
 
         public override void ExposeData()
         {
             Scribe_Values.Look(ref maxFanRows, "maxFanRows", DefaultMaxFanRows);
+            Scribe_Values.Look(ref hideCrossEraLines, "hideCrossEraLines", true);
+            Scribe_Values.Look(ref hideExtraLines, "hideExtraLines", false);
         }
     }
 
@@ -33,6 +37,9 @@ namespace NodeResearchBranches
             Settings.maxFanRows = Mathf.RoundToInt(list.Slider(Settings.maxFanRows, 3f, 20f));
             if (list.ButtonText("NRB_ResetDefault".Translate()))
                 Settings.maxFanRows = BranchesSettings.DefaultMaxFanRows;
+            list.Gap();
+            list.CheckboxLabeled("NRB_HideCrossEraLines".Translate(), ref Settings.hideCrossEraLines, "NRB_HideCrossEraLinesDesc".Translate());
+            list.CheckboxLabeled("NRB_HideExtraLines".Translate(), ref Settings.hideExtraLines, "NRB_HideExtraLinesDesc".Translate());
             list.End();
         }
     }

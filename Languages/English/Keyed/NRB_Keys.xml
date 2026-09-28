@@ -4,4 +4,8 @@
   <NRB_MaxFanRows>Most bubbles stacked per branch: {0}</NRB_MaxFanRows>
   <NRB_MaxFanRowsDesc>When one project leads to more end-of-branch projects than this, they wrap into extra columns instead of one tall stack. Lower values make the tree shorter and wider.</NRB_MaxFanRowsDesc>
   <NRB_ResetDefault>Reset to default</NRB_ResetDefault>
+  <NRB_HideCrossEraLines>Only show lines between eras for the selected bubble</NRB_HideCrossEraLines>
+  <NRB_HideCrossEraLinesDesc>In the All view, lines from one era to another are drawn only when you select a bubble at either end.</NRB_HideCrossEraLinesDesc>
+  <NRB_HideExtraLines>Only show extra prerequisite lines for the selected bubble</NRB_HideExtraLines>
+  <NRB_HideExtraLinesDesc>Each project keeps the line to the branch it grows from. Lines to its other prerequisites are drawn only when you select a bubble at either end.</NRB_HideExtraLinesDesc>
 </LanguageData>
