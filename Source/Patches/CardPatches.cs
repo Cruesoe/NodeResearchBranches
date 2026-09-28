@@ -29,6 +29,20 @@ namespace NodeResearchBranches.Patches
             };
 
             int start = list.FindLastIndex(ci => ci.Calls(drawLine));
+
+            // The line call gets the edge too (the local read just before as edge.from), so lines can run between card sides.
+            var fromField = AccessTools.Field(typeof(ResearchEdge), nameof(ResearchEdge.from));
+            int loadEdge = -1;
+            for (int i = start - 1; i > 0 && loadEdge < 0; i--)
+                if (list[i].IsLdloc() && list[i + 1].LoadsField(fromField)) loadEdge = i;
+            if (start >= 0 && loadEdge >= 0)
+            {
+                list[start].operand = AccessTools.Method(typeof(CardPatches), nameof(DrawEdge));
+                list.Insert(start, new CodeInstruction(list[loadEdge].opcode, list[loadEdge].operand));
+                start++;
+            }
+            else Log.Error("[Node Research: Branches] Could not find Node Research's line drawing, so lines will run between card centres.");
+
             int end = list.FindIndex(ci => ci.Calls(controls));
             int replaced = 0;
             if (start >= 0 && end > start)
@@ -46,6 +60,19 @@ namespace NodeResearchBranches.Patches
             if (replaced == 0)
                 Log.Error("[Node Research: Branches] Could not find Node Research's bubble drawing, so bubbles will show under the cards.");
             return list;
+        }
+
+        // Runs from the prerequisite's right side to the follow-up's left side; backward lines keep their centres.
+        private static void DrawEdge(Vector2 from, Vector2 to, Color color, float width, ResearchEdge edge)
+        {
+            float fromHalf = CardRenderer.Size(edge.from).x / 2f * CardRenderer.Zoom;
+            float toHalf = CardRenderer.Size(edge.to).x / 2f * CardRenderer.Zoom;
+            if (to.x - toHalf > from.x + fromHalf)
+            {
+                from.x += fromHalf;
+                to.x -= toHalf;
+            }
+            Widgets.DrawLine(from, to, color, width);
         }
 
         private static void NoTexture(Rect rect, Texture texture) { }
